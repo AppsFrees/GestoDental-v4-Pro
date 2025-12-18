@@ -1,732 +1,1945 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  signInAnonymously, 
-  signInWithCustomToken, 
-  onAuthStateChanged 
-} from 'firebase/auth';
-import { 
-  getFirestore, 
-  collection, 
-  doc, 
-  setDoc, 
-  getDoc, 
-  onSnapshot, 
-  addDoc, 
-  updateDoc, 
-  query 
-} from 'firebase/firestore';
-import { 
-  Plus, 
-  Users, 
-  Calendar, 
-  FileText, 
-  Settings, 
-  LogOut, 
-  Printer, 
-  Save, 
-  Search, 
-  Stethoscope, 
-  CreditCard, 
-  CheckCircle,
-  AlertCircle,
-  Menu,
-  X,
-  ChevronRight,
-  ClipboardList,
-  Heart
-} from 'lucide-react';
-
-// --- CONFIGURACIÓN DE FIREBASE ---
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'clinica-dental-v1';
-
-// --- DATOS MAESTROS (Vademécum & Tratamientos) ---
-const VADEMECUM_PERU = [
-  { nombre: "Amoxicilina 500mg", indicacion: "Antibiótico - Infecciones odontogénicas" },
-  { nombre: "Clindamicina 300mg", indicacion: "Antibiótico - Alérgicos a penicilina" },
-  { nombre: "Ibuprofeno 400mg/600mg", indicacion: "Analgésico/Antiinflamatorio" },
-  { nombre: "Ketorolaco 10mg/20mg", indicacion: "Analgésico potente" },
-  { nombre: "Paracetamol 500mg", indicacion: "Analgésico/Antipirético" },
-  { nombre: "Clorhexidina 0.12%", indicacion: "Antiséptico bucal" },
-  { nombre: "Dexametasona 4mg", indicacion: "Corticosteroide - Post cirugía" },
-  { nombre: "Naproxeno 550mg", indicacion: "Antiinflamatorio persistente" },
-  { nombre: "Eritromicina 500mg", indicacion: "Alternativa antibiótica" },
-  { nombre: "Metronidazol 500mg", indicacion: "Infecciones anaerobias" }
-];
-
-const TRATAMIENTOS_LIST = [
-  { id: 1, nombre: "Profilaxis Simple", costo: 120 },
-  { id: 2, nombre: "Restauración con Resina 1S", costo: 150 },
-  { id: 3, nombre: "Restauración con Resina 2S", costo: 180 },
-  { id: 4, nombre: "Endodoncia Monorradicular", costo: 450 },
-  { id: 5, nombre: "Endodoncia Multirradicular", costo: 750 },
-  { id: 6, nombre: "Exodoncia Simple", costo: 100 },
-  { id: 7, nombre: "Exodoncia Compleja/Cirugía", costo: 350 },
-  { id: 8, nombre: "Blanqueamiento Dental", costo: 600 },
-  { id: 9, nombre: "Corona Porcelana sobre Metal", costo: 900 },
-  { id: 10, nombre: "Prótesis Total (Superior o Inferior)", costo: 1200 },
-  { id: 11, nombre: "Instalación de Brackets Metálicos", costo: 1500 },
-  { id: 12, nombre: "Control de Ortodoncia", costo: 200 }
-];
-
-// --- COMPONENTES DE UI ---
-
-const Button = ({ children, onClick, variant = 'primary', className = '', type = 'button' }) => {
-  const baseStyle = "px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2";
-  const variants = {
-    primary: "bg-blue-600 text-white hover:bg-blue-700 shadow-md",
-    secondary: "bg-gray-100 text-gray-700 hover:bg-gray-200",
-    outline: "border-2 border-blue-600 text-blue-600 hover:bg-blue-50",
-    danger: "bg-red-500 text-white hover:bg-red-600",
-    ghost: "text-gray-500 hover:bg-gray-100"
-  };
-  return (
-    <button type={type} onClick={onClick} className={`${baseStyle} ${variants[variant]} ${className}`}>
-      {children}
-    </button>
-  );
-};
-
-const Card = ({ children, title, className = "" }) => (
-  <div className={`bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden ${className}`}>
-    {title && (
-      <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
-        <h3 className="font-semibold text-gray-800">{title}</h3>
-      </div>
-    )}
-    <div className="p-6">{children}</div>
-  </div>
-);
-
-// --- COMPONENTE PRINCIPAL ---
-
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [patients, setPatients] = useState([]);
-  const [selectedPatient, setSelectedPatient] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-
-  // Inicialización de Firebase Auth
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GestoDental v3.0 Pro - Sistema de Gestión Clínica Odontológica</title>
+    <style>
+        :root {
+            --primary: #208797;
+            --primary-dark: #1a6f7f;
+            --accent: #e8634a;
+            --success: #27ae60;
+            --danger: #e74c3c;
+            --warning: #f39c12;
+            --info: #3498db;
+            --gray-50: #fafbfc;
+            --gray-100: #f8f9fa;
+            --gray-200: #e9ecef;
+            --gray-300: #dee2e6;
+            --gray-700: #495057;
+            --gray-800: #212529;
         }
-      } catch (error) {
-        console.error("Auth Error:", error);
-      }
-    };
-    initAuth();
-    return onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setLoading(false);
-    });
-  }, []);
 
-  // Carga de Pacientes de Firestore (Sincronización Automática)
-  useEffect(() => {
-    if (!user) return;
-    const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'patients'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const pList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setPatients(pList);
-    }, (err) => console.error("Firestore Error:", err));
-    return () => unsubscribe();
-  }, [user]);
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-  const savePatient = async (patientData) => {
-    if (!user) return;
-    try {
-      if (patientData.id) {
-        await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'patients', patientData.id), patientData);
-      } else {
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'patients'), {
-          ...patientData,
-          createdAt: new Date().toISOString()
-        });
-      }
-    } catch (error) {
-      console.error("Error al guardar paciente:", error);
-    }
-  };
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
 
-  if (loading) return (
-    <div className="h-screen w-full flex items-center justify-center bg-gray-50">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        .container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 1600px;
+            width: 100%;
+            display: none;
+        }
+
+        .container.active {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .auth-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+        }
+
+        .login-box {
+            background: white;
+            padding: 50px;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 450px;
+            text-align: center;
+        }
+
+        .login-box h1 {
+            color: var(--primary);
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+
+        .login-box .version {
+            color: var(--info);
+            font-size: 12px;
+            margin-bottom: 30px;
+            font-weight: 600;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            text-align: left;
+            margin-bottom: 8px;
+            color: var(--gray-700);
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid var(--gray-300);
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(32, 135, 151, 0.1);
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+            width: 100%;
+        }
+
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(32, 135, 151, 0.4);
+        }
+
+        .btn-secondary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #d45238;
+        }
+
+        .btn-sm {
+            padding: 8px 15px;
+            font-size: 14px;
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-info {
+            background: var(--info);
+            color: white;
+        }
+
+        .main-layout {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 280px;
+            background: linear-gradient(180deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 3px solid rgba(255,255,255,0.1);
+        }
+
+        .sidebar h2 {
+            margin-bottom: 25px;
+            font-size: 18px;
+            text-align: center;
+            padding-bottom: 15px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .menu-section {
+            margin-bottom: 25px;
+        }
+
+        .menu-section-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.6);
+            font-weight: 700;
+            margin-bottom: 10px;
+            padding-left: 5px;
+            letter-spacing: 1px;
+        }
+
+        .menu-item {
+            padding: 12px 15px;
+            margin-bottom: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .menu-item:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateX(5px);
+        }
+
+        .menu-item.active {
+            background: var(--accent);
+            box-shadow: 0 4px 12px rgba(232, 99, 74, 0.3);
+        }
+
+        .content {
+            flex: 1;
+            padding: 30px;
+            overflow-y: auto;
+            background: var(--gray-100);
+        }
+
+        .section {
+            display: none;
+        }
+
+        .section.active {
+            display: block;
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        h2 {
+            color: var(--primary);
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid var(--accent);
+            font-size: 26px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            border-left: 5px solid var(--primary);
+            transition: all 0.3s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+        }
+
+        .card.highlight {
+            border-left-color: var(--accent);
+            background: linear-gradient(135deg, #fff8f5 0%, #fffbf9 100%);
+        }
+
+        .card.success {
+            border-left-color: var(--success);
+            background: linear-gradient(135deg, #f0f9f5 0%, #f8fdfb 100%);
+        }
+
+        .card.warning {
+            border-left-color: var(--warning);
+            background: linear-gradient(135deg, #fffaf5 0%, #fffdf8 100%);
+        }
+
+        .card h3 {
+            color: var(--primary);
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        .card-value {
+            font-size: 36px;
+            font-weight: bold;
+            margin: 15px 0;
+        }
+
+        .card-label {
+            color: var(--gray-700);
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .stat-info {
+            background: var(--gray-50);
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 15px;
+            font-size: 12px;
+            color: var(--gray-700);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .form-col {
+            flex: 1;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid var(--gray-300);
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: inherit;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(32, 135, 151, 0.1);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            margin-top: 20px;
+        }
+
+        .table thead {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+        }
+
+        .table th {
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid var(--gray-200);
+            font-size: 14px;
+        }
+
+        .table tbody tr:hover {
+            background: var(--gray-50);
+        }
+
+        .table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-success {
+            background: rgba(39, 174, 96, 0.15);
+            color: var(--success);
+        }
+
+        .badge-danger {
+            background: rgba(231, 76, 60, 0.15);
+            color: var(--danger);
+        }
+
+        .badge-warning {
+            background: rgba(243, 156, 18, 0.15);
+            color: var(--warning);
+        }
+
+        .badge-info {
+            background: rgba(52, 152, 219, 0.15);
+            color: var(--info);
+        }
+
+        .header {
+            background: white;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 3px solid var(--primary);
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .header h1 {
+            color: var(--primary);
+            font-size: 24px;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .user-badge {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: var(--gray-100);
+            padding: 10px 15px;
+            border-radius: 8px;
+        }
+
+        .btn-logout {
+            background: var(--danger);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+
+        .btn-logout:hover {
+            background: #c0392b;
+            transform: translateY(-2px);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 35px;
+            border-radius: 15px;
+            max-width: 600px;
+            width: 90%;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-content h3 {
+            color: var(--primary);
+            margin-bottom: 25px;
+            font-size: 22px;
+        }
+
+        .close-modal {
+            background: transparent;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--gray-700);
+            float: right;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid var(--gray-200);
+        }
+
+        .tab {
+            padding: 12px 20px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--gray-700);
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            color: var(--primary);
+            border-bottom-color: var(--primary);
+        }
+
+        .info-box {
+            background: linear-gradient(135deg, #e8f4f8 0%, #f0f8fb 100%);
+            border-left: 4px solid var(--primary);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            color: var(--gray-800);
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .alert-success {
+            background: rgba(39, 174, 96, 0.1);
+            color: var(--success);
+            border-left: 4px solid var(--success);
+        }
+
+        .alert-danger {
+            background: rgba(231, 76, 60, 0.1);
+            color: var(--danger);
+            border-left: 4px solid var(--danger);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 5px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .status-pending {
+            background: var(--warning);
+            color: white;
+        }
+
+        .status-completed {
+            background: var(--success);
+            color: white;
+        }
+
+        .status-cancelled {
+            background: var(--danger);
+            color: white;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 1200px) {
+            .sidebar {
+                width: 250px;
+            }
+            .dashboard-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .main-layout {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                display: flex;
+                gap: 5px;
+                overflow-x: auto;
+                border-right: none;
+                border-bottom: 3px solid rgba(255,255,255,0.1);
+            }
+
+            .menu-item {
+                white-space: nowrap;
+                flex-shrink: 0;
+            }
+
+            .content {
+                padding: 15px;
+            }
+
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .modal-content {
+                width: 95%;
+                max-height: 95vh;
+            }
+        }
+
+        .export-btns {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .quick-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        .stat-card-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: var(--primary);
+            margin: 10px 0;
+        }
+
+        .stat-card-label {
+            font-size: 12px;
+            color: var(--gray-700);
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <!-- Auth Container -->
+    <div id="authContainer" class="auth-container">
+        <div class="login-box">
+            <h1>🦷 GestoDental</h1>
+            <div class="version">Versión 3.0 Pro - Sistema Profesional</div>
+            <p style="color: var(--gray-700); margin-bottom: 30px; font-size: 14px;">
+                Gestión Integral de Clínica Odontológica
+            </p>
+            <div class="form-group">
+                <label>Usuario</label>
+                <input type="text" id="loginUser" placeholder="usuario@clinica.com">
+            </div>
+            <div class="form-group">
+                <label>Contraseña</label>
+                <input type="password" id="loginPassword" placeholder="Contraseña">
+            </div>
+            <button class="btn btn-primary" onclick="login()">Iniciar Sesión</button>
+            <p style="margin-top: 20px; color: var(--gray-700); font-size: 12px;">
+                <strong>Demo:</strong> usuario: admin | contraseña: 1234
+            </p>
+        </div>
     </div>
-  );
 
-  return (
-    <div className="min-h-screen bg-gray-50 flex font-sans text-gray-900">
-      {/* Sidebar */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white transform transition-transform duration-300 lg:relative lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-        <div className="p-6">
-          <div className="flex items-center gap-3 mb-10">
-            <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/50">
-              <Stethoscope className="text-white" size={24} />
-            </div>
-            <span className="text-xl font-bold tracking-tight">DentalPro <span className="text-blue-400">Peru</span></span>
-          </div>
-
-          <nav className="space-y-2">
-            {[
-              { id: 'dashboard', icon: <ChevronRight size={18} />, label: 'Dashboard' },
-              { id: 'patients', icon: <Users size={18} />, label: 'Pacientes' },
-              { id: 'agenda', icon: <Calendar size={18} />, label: 'Citas' },
-              { id: 'presupuesto', icon: <CreditCard size={18} />, label: 'Presupuestos' },
-              { id: 'ortodoncia', icon: <Heart size={18} />, label: 'Ortodoncia' },
-              { id: 'recetario', icon: <FileText size={18} />, label: 'Vademécum' },
-            ].map((item) => (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${activeTab === item.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
-              >
-                {item.icon}
-                {item.label}
-              </button>
-            ))}
-          </nav>
-        </div>
-        
-        <div className="absolute bottom-0 w-full p-6 border-t border-slate-800">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-8 h-8 rounded-full bg-blue-400"></div>
-            <div className="text-sm">
-              <p className="font-medium text-white">Dr. Juan Pérez</p>
-              <p className="text-slate-500">COP: 12345</p>
-            </div>
-          </div>
-          <button className="flex items-center gap-2 text-slate-400 hover:text-white text-sm transition-colors">
-            <LogOut size={16} /> Cerrar Sesión
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">
-        <header className="bg-white border-b border-gray-200 px-8 py-4 sticky top-0 z-40 flex justify-between items-center">
-          <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="lg:hidden p-2 text-gray-500">
-            <Menu size={24} />
-          </button>
-          <h1 className="text-2xl font-bold text-gray-800 capitalize">
-            {activeTab === 'dashboard' ? 'Resumen General' : activeTab}
-          </h1>
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-              <input 
-                type="text" 
-                placeholder="Buscar paciente..." 
-                className="pl-10 pr-4 py-2 bg-gray-100 border-none rounded-full text-sm focus:ring-2 focus:ring-blue-500 w-64"
-              />
-            </div>
-            <Button variant="primary" onClick={() => { setSelectedPatient({ nombre: '', dni: '', celular: '', historial: [] }); setActiveTab('patients'); }}>
-              <Plus size={18} /> Nuevo Paciente
-            </Button>
-          </div>
-        </header>
-
-        <div className="p-8">
-          {activeTab === 'dashboard' && <Dashboard patients={patients} />}
-          {activeTab === 'patients' && (
-            <PatientsModule 
-              patients={patients} 
-              onSave={savePatient} 
-              selectedPatient={selectedPatient} 
-              setSelectedPatient={setSelectedPatient} 
-            />
-          )}
-          {activeTab === 'recetario' && <VademecumModule />}
-          {activeTab === 'presupuesto' && <PresupuestoModule patients={patients} />}
-          {activeTab === 'ortodoncia' && <OrtodonciaModule patients={patients} />}
-          {activeTab === 'agenda' && <AgendaModule />}
-        </div>
-      </main>
-    </div>
-  );
-}
-
-// --- SUBMODULOS ---
-
-function Dashboard({ patients }) {
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="bg-gradient-to-br from-blue-600 to-blue-700 text-white">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-blue-100 text-sm font-medium">Total Pacientes</p>
-              <h2 className="text-3xl font-bold mt-1">{patients.length}</h2>
-            </div>
-            <Users className="text-blue-300 opacity-50" size={32} />
-          </div>
-        </Card>
-        <Card className="bg-white">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-gray-500 text-sm font-medium">Citas Hoy</p>
-              <h2 className="text-3xl font-bold mt-1 text-gray-800">8</h2>
-            </div>
-            <Calendar className="text-blue-500" size={32} />
-          </div>
-        </Card>
-        <Card className="bg-white">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-gray-500 text-sm font-medium">Recaudación Mes</p>
-              <h2 className="text-3xl font-bold mt-1 text-gray-800">S/ 12,450</h2>
-            </div>
-            <CreditCard className="text-green-500" size={32} />
-          </div>
-        </Card>
-        <Card className="bg-white">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-gray-500 text-sm font-medium">Casos Activos</p>
-              <h2 className="text-3xl font-bold mt-1 text-gray-800">42</h2>
-            </div>
-            <Stethoscope className="text-purple-500" size={32} />
-          </div>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card title="Próximas Citas">
-          <div className="space-y-4">
-            {[1, 2, 3].map(i => (
-              <div key={i} className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">P</div>
-                  <div>
-                    <p className="font-semibold text-gray-800">Paciente Ejemplo {i}</p>
-                    <p className="text-xs text-gray-500">Ortodoncia - 10:30 AM</p>
-                  </div>
+    <!-- Main Container -->
+    <div id="mainContainer" class="container">
+        <div class="header">
+            <h1>GestoDental v3.0 Pro</h1>
+            <div class="user-info">
+                <div class="user-badge">
+                    <span>👤</span>
+                    <span id="userDisplay">admin</span>
                 </div>
-                <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">Confirmado</span>
-              </div>
-            ))}
-          </div>
-        </Card>
-        <Card title="Actividad Reciente">
-           <div className="space-y-4">
-            <div className="flex gap-4">
-              <div className="w-1 bg-blue-500 rounded-full"></div>
-              <div>
-                <p className="text-sm font-medium text-gray-800">Nueva Historia Clínica creada</p>
-                <p className="text-xs text-gray-500">Hace 15 minutos • Maria Delgado</p>
-              </div>
+                <button class="btn-logout" onclick="logout()">Cerrar Sesión</button>
             </div>
-            <div className="flex gap-4">
-              <div className="w-1 bg-green-500 rounded-full"></div>
-              <div>
-                <p className="text-sm font-medium text-gray-800">Pago registrado: S/ 200.00</p>
-                <p className="text-xs text-gray-500">Hace 1 hora • Pedro Castillo</p>
-              </div>
-            </div>
-          </div>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-function PatientsModule({ patients, onSave, selectedPatient, setSelectedPatient }) {
-  const [formData, setFormData] = useState({ nombre: '', dni: '', celular: '', email: '', direccion: '', tipoOdontograma: 'adulto' });
-
-  useEffect(() => {
-    if (selectedPatient) setFormData(selectedPatient);
-  }, [selectedPatient]);
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    onSave(formData);
-    setSelectedPatient(null);
-    setFormData({ nombre: '', dni: '', celular: '', email: '', direccion: '', tipoOdontograma: 'adulto' });
-  };
-
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      <div className="lg:col-span-1 space-y-6">
-        <Card title={selectedPatient?.id ? "Editar Paciente" : "Registrar Paciente"}>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nombre Completo</label>
-              <input required value={formData.nombre} onChange={e => setFormData({...formData, nombre: e.target.value})} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 transition-all outline-none" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">DNI</label>
-                <input required value={formData.dni} onChange={e => setFormData({...formData, dni: e.target.value})} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Celular</label>
-                <input required value={formData.celular} onChange={e => setFormData({...formData, celular: e.target.value})} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Tipo Odontograma</label>
-              <select value={formData.tipoOdontograma} onChange={e => setFormData({...formData, tipoOdontograma: e.target.value})} className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none">
-                <option value="adulto">Adulto</option>
-                <option value="nino">Niño (Pediatría)</option>
-              </select>
-            </div>
-            <div className="pt-4 flex gap-2">
-              <Button type="submit" className="flex-1">
-                <Save size={18} /> {selectedPatient?.id ? 'Actualizar' : 'Guardar'}
-              </Button>
-              {selectedPatient && (
-                <Button variant="secondary" onClick={() => setSelectedPatient(null)}>Cancelar</Button>
-              )}
-            </div>
-          </form>
-        </Card>
-      </div>
-
-      <div className="lg:col-span-2 space-y-6">
-        <Card title="Listado de Pacientes">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="text-xs uppercase text-gray-500 border-b">
-                <tr>
-                  <th className="py-3 px-4">Nombre</th>
-                  <th className="py-3 px-4">DNI</th>
-                  <th className="py-3 px-4">Celular</th>
-                  <th className="py-3 px-4">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y text-sm">
-                {patients.map(p => (
-                  <tr key={p.id} className="hover:bg-gray-50">
-                    <td className="py-3 px-4 font-medium">{p.nombre}</td>
-                    <td className="py-3 px-4 text-gray-600">{p.dni}</td>
-                    <td className="py-3 px-4 text-gray-600">{p.celular}</td>
-                    <td className="py-3 px-4 flex gap-2">
-                      <Button variant="ghost" onClick={() => setSelectedPatient(p)}>Editar</Button>
-                      <Button variant="ghost" className="text-blue-600" onClick={() => { /* Abrir Odontograma */ }}>Ver Historial</Button>
-                    </td>
-                  </tr>
-                ))}
-                {patients.length === 0 && (
-                  <tr>
-                    <td colSpan="4" className="py-10 text-center text-gray-400">No hay pacientes registrados.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-
-        {selectedPatient && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card title="Odontograma">
-              <Odontograma tipo={formData.tipoOdontograma} />
-            </Card>
-            <Card title="Consentimientos">
-              <div className="space-y-2">
-                <button className="w-full p-3 text-left border rounded hover:bg-blue-50 transition flex justify-between items-center group">
-                  <span>Cirugía Oral y Exodoncia</span>
-                  <Printer size={16} className="text-gray-400 group-hover:text-blue-600" />
-                </button>
-                <button className="w-full p-3 text-left border rounded hover:bg-blue-50 transition flex justify-between items-center group">
-                  <span>Tratamiento de Endodoncia</span>
-                  <Printer size={16} className="text-gray-400 group-hover:text-blue-600" />
-                </button>
-                <button className="w-full p-3 text-left border rounded hover:bg-blue-50 transition flex justify-between items-center group">
-                  <span>Tratamiento de Ortodoncia</span>
-                  <Printer size={16} className="text-gray-400 group-hover:text-blue-600" />
-                </button>
-              </div>
-            </Card>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Odontograma({ tipo }) {
-  // Simplificación visual del odontograma
-  const dientes = tipo === 'adulto' ? Array.from({length: 32}, (_, i) => i + 1) : Array.from({length: 20}, (_, i) => i + 1);
-  return (
-    <div className="flex flex-wrap gap-2 justify-center py-4 bg-blue-50 rounded-lg border-2 border-dashed border-blue-200">
-      {dientes.map(d => (
-        <div key={d} className="w-8 h-10 border bg-white rounded flex flex-col items-center justify-between cursor-pointer hover:bg-red-50 transition text-[10px] font-bold">
-          <span className="text-gray-400">{d}</span>
-          <div className="w-4 h-4 rounded-full border border-gray-200"></div>
-          <span className="bg-blue-100 w-full text-center text-blue-800">S</span>
         </div>
-      ))}
-      <div className="w-full text-center mt-4">
-        <p className="text-xs text-gray-500 italic">Haga clic en un diente para marcar hallazgo (Caries, Obturación, Ausente)</p>
-      </div>
-    </div>
-  );
-}
 
-function VademecumModule() {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [receta, setReceta] = useState([]);
-
-  const filtered = VADEMECUM_PERU.filter(f => f.nombre.toLowerCase().includes(searchTerm.toLowerCase()));
-
-  const addToReceta = (f) => setReceta([...receta, { ...f, dosis: "1 cada 8 horas por 3 días" }]);
-
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-      <Card title="Vademécum Odontológico Perú">
-        <div className="mb-4 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-          <input 
-            type="text" 
-            placeholder="Buscar fármaco..." 
-            className="w-full pl-10 pr-4 py-2 border rounded-lg"
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-          />
-        </div>
-        <div className="max-h-[500px] overflow-y-auto space-y-2">
-          {filtered.map((f, i) => (
-            <div key={i} className="p-3 border rounded-lg hover:bg-blue-50 flex justify-between items-center group cursor-pointer" onClick={() => addToReceta(f)}>
-              <div>
-                <p className="font-semibold text-gray-800">{f.nombre}</p>
-                <p className="text-xs text-gray-500">{f.indicacion}</p>
-              </div>
-              <Plus size={18} className="text-blue-600 opacity-0 group-hover:opacity-100" />
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      <Card title="Receta Actual">
-        {receta.length === 0 ? (
-          <div className="h-[400px] flex flex-col items-center justify-center text-gray-400">
-            <ClipboardList size={48} className="mb-4 opacity-20" />
-            <p>Seleccione fármacos del vademécum</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            <div className="border-b pb-4 mb-4">
-              <h4 className="font-bold text-center text-blue-900 border-2 border-blue-900 p-2 uppercase">Recetario Médico</h4>
-              <div className="mt-4 text-xs text-gray-600 grid grid-cols-2 gap-2">
-                <p><strong>Paciente:</strong> _______________________</p>
-                <p><strong>Fecha:</strong> {new Date().toLocaleDateString()}</p>
-              </div>
-            </div>
-            <div className="min-h-[300px] space-y-4">
-              {receta.map((r, i) => (
-                <div key={i} className="flex justify-between items-start">
-                  <div>
-                    <p className="font-bold">Rp/ {r.nombre}</p>
-                    <p className="text-sm italic ml-4">{r.dosis}</p>
-                  </div>
-                  <button onClick={() => setReceta(receta.filter((_, idx) => idx !== i))} className="text-red-500 hover:text-red-700">
-                    <X size={14} />
-                  </button>
+        <div class="main-layout">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <h2>🦷 MENÚ</h2>
+                
+                <div class="menu-section">
+                    <div class="menu-section-title">Principal</div>
+                    <div class="menu-item active" onclick="showSection('dashboard')">📊 Dashboard</div>
+                    <div class="menu-item" onclick="showSection('patients')">👥 Pacientes</div>
+                    <div class="menu-item" onclick="showSection('appointments')">📅 Citas</div>
                 </div>
-              ))}
+
+                <div class="menu-section">
+                    <div class="menu-section-title">Clínica</div>
+                    <div class="menu-item" onclick="showSection('odontogram')">🦷 Odontograma</div>
+                    <div class="menu-item" onclick="showSection('treatments')">🛠️ Tratamientos</div>
+                    <div class="menu-item" onclick="showSection('clinical-history')">📋 Historial Clínico</div>
+                </div>
+
+                <div class="menu-section">
+                    <div class="menu-section-title">Medicamentos</div>
+                    <div class="menu-item" onclick="showSection('prescriptions')">💊 Recetas</div>
+                    <div class="menu-item" onclick="showSection('inventory')">📦 Inventario</div>
+                </div>
+
+                <div class="menu-section">
+                    <div class="menu-section-title">Documentos</div>
+                    <div class="menu-item" onclick="showSection('budgets')">💰 Presupuestos</div>
+                    <div class="menu-item" onclick="showSection('consents')">📄 Consentimientos</div>
+                    <div class="menu-item" onclick="showSection('invoices')">🧾 Facturación</div>
+                </div>
+
+                <div class="menu-section">
+                    <div class="menu-section-title">Gestión</div>
+                    <div class="menu-item" onclick="showSection('staff')">👨‍⚕️ Personal</div>
+                    <div class="menu-item" onclick="showSection('marketing')">📢 Marketing</div>
+                    <div class="menu-item" onclick="showSection('reports')">📈 Reportes</div>
+                </div>
+
+                <div class="menu-section">
+                    <div class="menu-section-title">Sistema</div>
+                    <div class="menu-item" onclick="showSection('settings')">⚙️ Configuración</div>
+                    <div class="menu-item" onclick="showSection('backup')">💾 Backup</div>
+                </div>
             </div>
-            <div className="pt-6 flex gap-2 no-print">
-              <Button className="w-full" onClick={() => window.print()}>
-                <Printer size={18} /> Imprimir Receta
-              </Button>
+
+            <!-- Content -->
+            <div class="content">
+                <!-- Dashboard Section -->
+                <div id="dashboard" class="section active">
+                    <h2>📊 Dashboard Ejecutivo</h2>
+                    
+                    <div class="dashboard-grid">
+                        <div class="card">
+                            <div class="card-label">Total Pacientes</div>
+                            <div class="card-value" id="totalPatients">0</div>
+                            <div class="stat-info">Registrados en el sistema</div>
+                        </div>
+
+                        <div class="card highlight">
+                            <div class="card-label">Citas Hoy</div>
+                            <div class="card-value" id="todayAppointments">0</div>
+                            <div class="stat-info">Próximas 24 horas</div>
+                        </div>
+
+                        <div class="card success">
+                            <div class="card-label">Recetas</div>
+                            <div class="card-value" id="totalPrescriptions">0</div>
+                            <div class="stat-info">Emitidas este mes</div>
+                        </div>
+
+                        <div class="card warning">
+                            <div class="card-label">Presupuestos Pendientes</div>
+                            <div class="card-value" id="pendingBudgets">0</div>
+                            <div class="stat-info">Aguardando respuesta</div>
+                        </div>
+                    </div>
+
+                    <h3 style="color: var(--primary); margin: 30px 0 20px 0; font-size: 18px;">📈 Estadísticas Detalladas</h3>
+                    
+                    <div class="grid">
+                        <div class="card">
+                            <h3>👥 Pacientes por Estado</h3>
+                            <table class="table" style="margin: 0;">
+                                <tbody>
+                                    <tr>
+                                        <td><span class="badge badge-success">Activos</span></td>
+                                        <td style="text-align: right; font-weight: bold;" id="patientsActive">0</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="badge badge-warning">Inactivos</span></td>
+                                        <td style="text-align: right; font-weight: bold;" id="patientsInactive">0</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="badge badge-danger">Morosos</span></td>
+                                        <td style="text-align: right; font-weight: bold;" id="patientsMorosos">0</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div class="card">
+                            <h3>💰 Ingresos del Mes</h3>
+                            <div style="font-size: 32px; color: var(--success); font-weight: bold; margin: 15px 0;">
+                                S/ <span id="monthlyIncome">0.00</span>
+                            </div>
+                            <div class="stat-info">Facturación vigente</div>
+                        </div>
+
+                        <div class="card">
+                            <h3>📋 Citas Programadas</h3>
+                            <div style="font-size: 28px; color: var(--primary); font-weight: bold; margin: 15px 0;">
+                                <span id="totalAppointments">0</span> / <span id="appointmentCapacity">50</span>
+                            </div>
+                            <div class="stat-info">Ocupación de agenda</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Patients Section -->
+                <div id="patients" class="section">
+                    <h2>👥 Gestión de Pacientes</h2>
+                    <button class="btn btn-primary" onclick="openPatientModal()" style="margin-bottom: 20px;">➕ Nuevo Paciente</button>
+                    
+                    <div class="info-box">
+                        💡 Gestiona el registro de pacientes, historial médico y datos de contacto
+                    </div>
+
+                    <div id="patientsList"></div>
+                </div>
+
+                <!-- Appointments Section -->
+                <div id="appointments" class="section">
+                    <h2>📅 Gestión de Citas</h2>
+                    <button class="btn btn-primary" onclick="openAppointmentModal()" style="margin-bottom: 20px;">➕ Nueva Cita</button>
+                    
+                    <div class="tabs">
+                        <button class="tab active" onclick="filterAppointments('all')">Todas</button>
+                        <button class="tab" onclick="filterAppointments('pending')">Pendientes</button>
+                        <button class="tab" onclick="filterAppointments('completed')">Completadas</button>
+                    </div>
+
+                    <div id="appointmentsList"></div>
+                </div>
+
+                <!-- Clinical History Section -->
+                <div id="clinical-history" class="section">
+                    <h2>📋 Historial Clínico Electrónico</h2>
+                    <button class="btn btn-primary" onclick="openClinicalModal()" style="margin-bottom: 20px;">➕ Nuevo Registro</button>
+                    
+                    <div class="info-box">
+                        📝 Registro completo de diagnósticos, tratamientos y observaciones clínicas
+                    </div>
+
+                    <div id="clinicalList"></div>
+                </div>
+
+                <!-- Odontogram Section -->
+                <div id="odontogram" class="section">
+                    <h2>🦷 Odontograma MINSA</h2>
+                    
+                    <div class="form-row">
+                        <div class="form-col">
+                            <label>Seleccionar Paciente</label>
+                            <select id="odontoPacientSelect" onchange="loadPatientOdontogram()" style="width: 100%; padding: 10px; border: 2px solid var(--gray-300); border-radius: 8px;">
+                                <option>-- Seleccionar --</option>
+                            </select>
+                        </div>
+                        <div class="form-col">
+                            <label>Tipo de Dentición</label>
+                            <select id="dentitionType" onchange="changeOdontogramType()" style="width: 100%; padding: 10px; border: 2px solid var(--gray-300); border-radius: 8px;">
+                                <option value="adult">Adulto (32 dientes)</option>
+                                <option value="child">Niño (20 dientes)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="background: white; padding: 30px; border-radius: 12px; margin: 20px 0; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);">
+                        <div style="text-align: center; font-size: 18px; font-weight: bold; margin-bottom: 20px; color: var(--primary);">MAXILAR SUPERIOR</div>
+                        <div class="teeth-grid" id="upperTeeth"></div>
+
+                        <div style="text-align: center; font-size: 18px; font-weight: bold; margin: 30px 0 20px 0; color: var(--primary);">MAXILAR INFERIOR</div>
+                        <div class="teeth-grid" id="lowerTeeth"></div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; background: white; padding: 20px; border-radius: 12px; margin: 20px 0;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="width: 30px; height: 30px; background: #e74c3c; border-radius: 5px;"></div>
+                            <span>Caries/Patología</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="width: 30px; height: 30px; background: #3498db; border-radius: 5px;"></div>
+                            <span>Tratado</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="width: 30px; height: 30px; background: #f39c12; border-radius: 5px;"></div>
+                            <span>Radiográfica</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="width: 30px; height: 30px; background: #27ae60; border-radius: 5px;"></div>
+                            <span>Sellado</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="width: 30px; height: 30px; background: #bdc3c7; border-radius: 5px;"></div>
+                            <span>Ausencia</span>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; margin-top: 20px;">
+                        <button class="btn btn-primary" onclick="saveOdontogram()">💾 Guardar Odontograma</button>
+                        <button class="btn btn-secondary" onclick="printOdontogram()">🖨️ Imprimir</button>
+                    </div>
+                </div>
+
+                <!-- Treatments Section -->
+                <div id="treatments" class="section">
+                    <h2>🛠️ Registro de Tratamientos</h2>
+                    <button class="btn btn-primary" onclick="openTreatmentModal()" style="margin-bottom: 20px;">➕ Nuevo Tratamiento</button>
+                    
+                    <div id="treatmentsList"></div>
+                </div>
+
+                <!-- Prescriptions Section -->
+                <div id="prescriptions" class="section">
+                    <h2>💊 Recetario - Vademécum Perú</h2>
+                    <button class="btn btn-primary" onclick="openPrescriptionModal()" style="margin-bottom: 20px;">➕ Nueva Receta</button>
+                    
+                    <div id="prescriptionsList"></div>
+                </div>
+
+                <!-- Inventory Section -->
+                <div id="inventory" class="section">
+                    <h2>📦 Gestión de Inventario</h2>
+                    <button class="btn btn-primary" onclick="openInventoryModal()" style="margin-bottom: 20px;">➕ Nuevo Producto</button>
+                    
+                    <div id="inventoryList"></div>
+                </div>
+
+                <!-- Budgets Section -->
+                <div id="budgets" class="section">
+                    <h2>💰 Presupuestos</h2>
+                    <button class="btn btn-primary" onclick="openBudgetModal()" style="margin-bottom: 20px;">➕ Nuevo Presupuesto</button>
+                    
+                    <div id="budgetsList"></div>
+                </div>
+
+                <!-- Consents Section -->
+                <div id="consents" class="section">
+                    <h2>📄 Consentimientos Informados</h2>
+                    
+                    <div class="form-row">
+                        <div class="form-col">
+                            <label>Seleccionar Paciente</label>
+                            <select id="consentPatient" style="width: 100%; padding: 10px; border: 2px solid var(--gray-300); border-radius: 8px;">
+                                <option>-- Seleccionar --</option>
+                            </select>
+                        </div>
+                        <div class="form-col">
+                            <label>Tipo de Consentimiento</label>
+                            <select id="consentType" style="width: 100%; padding: 10px; border: 2px solid var(--gray-300); border-radius: 8px;">
+                                <option>-- Seleccionar --</option>
+                                <option value="general">General</option>
+                                <option value="endodoncia">Endodoncia</option>
+                                <option value="implante">Implantología</option>
+                                <option value="cirugia">Cirugía Oral</option>
+                                <option value="ortodoncia">Ortodoncia</option>
+                                <option value="anestesia">Anestesia</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="generateConsent()">📄 Generar Consentimiento</button>
+                    
+                    <div id="consentResult" style="margin-top: 20px;"></div>
+                </div>
+
+                <!-- Invoices Section -->
+                <div id="invoices" class="section">
+                    <h2>🧾 Facturación</h2>
+                    <button class="btn btn-primary" onclick="openInvoiceModal()" style="margin-bottom: 20px;">➕ Nueva Factura</button>
+                    
+                    <div id="invoicesList"></div>
+                </div>
+
+                <!-- Staff Section -->
+                <div id="staff" class="section">
+                    <h2>👨‍⚕️ Gestión de Personal</h2>
+                    <button class="btn btn-primary" onclick="openStaffModal()" style="margin-bottom: 20px;">➕ Agregar Personal</button>
+                    
+                    <div id="staffList"></div>
+                </div>
+
+                <!-- Marketing Section -->
+                <div id="marketing" class="section">
+                    <h2>📢 Marketing y Comunicación</h2>
+                    
+                    <div class="grid">
+                        <div class="card">
+                            <h3>📧 Campañas de Email</h3>
+                            <button class="btn btn-secondary" onclick="openEmailCampaign()">Crear Campaña</button>
+                        </div>
+                        <div class="card">
+                            <h3>📱 SMS Masivo</h3>
+                            <button class="btn btn-secondary" onclick="openSMSCampaign()">Enviar SMS</button>
+                        </div>
+                        <div class="card">
+                            <h3>⭐ Reseñas</h3>
+                            <button class="btn btn-secondary" onclick="manageReviews()">Gestionar</button>
+                        </div>
+                        <div class="card">
+                            <h3>📋 Recordatorios</h3>
+                            <button class="btn btn-secondary" onclick="setupReminders()">Configurar</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reports Section -->
+                <div id="reports" class="section">
+                    <h2>📈 Reportes y Análisis</h2>
+                    
+                    <div class="tabs">
+                        <button class="tab active" onclick="showReport('financial')">Financiero</button>
+                        <button class="tab" onclick="showReport('clinical')">Clínico</button>
+                        <button class="tab" onclick="showReport('patients')">Pacientes</button>
+                        <button class="tab" onclick="showReport('treatments')">Tratamientos</button>
+                    </div>
+
+                    <div id="reportsContent"></div>
+                </div>
+
+                <!-- Settings Section -->
+                <div id="settings" class="section">
+                    <h2>⚙️ Configuración del Sistema</h2>
+                    
+                    <div class="card" style="margin-bottom: 20px;">
+                        <h3>🏥 Información de la Clínica</h3>
+                        <div class="form-row">
+                            <div class="form-col">
+                                <label>Nombre de Clínica</label>
+                                <input type="text" id="clinicName" placeholder="Nombre">
+                            </div>
+                            <div class="form-col">
+                                <label>RUC/DNI</label>
+                                <input type="text" id="clinicRuc" placeholder="RUC">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-col">
+                                <label>Teléfono</label>
+                                <input type="text" id="clinicPhone" placeholder="Teléfono">
+                            </div>
+                            <div class="form-col">
+                                <label>Email</label>
+                                <input type="email" id="clinicEmail" placeholder="Email">
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" onclick="saveClinicInfo()">💾 Guardar Información</button>
+                    </div>
+
+                    <div class="card">
+                        <h3>🔑 GitHub Configuration</h3>
+                        <div class="form-row">
+                            <div class="form-col">
+                                <label>Usuario GitHub</label>
+                                <input type="text" id="githubUser" placeholder="usuario">
+                            </div>
+                            <div class="form-col">
+                                <label>Token GitHub</label>
+                                <input type="password" id="githubToken" placeholder="token">
+                            </div>
+                        </div>
+                        <div class="form-col">
+                            <label>Repositorio</label>
+                            <input type="text" id="githubRepo" placeholder="gestodental-datos">
+                        </div>
+                        <button class="btn btn-primary" onclick="saveGithubConfig()">💾 Guardar Configuración</button>
+                        <button class="btn btn-info" onclick="testGithubConnection()">🧪 Probar Conexión</button>
+                    </div>
+                </div>
+
+                <!-- Backup Section -->
+                <div id="backup" class="section">
+                    <h2>💾 Backup y Sincronización</h2>
+                    
+                    <div class="info-box">
+                        ✅ Sincronización automática habilitada. Los datos se respaldan cada 5 minutos.
+                    </div>
+
+                    <div class="export-btns">
+                        <button class="btn btn-primary" onclick="exportData()">📥 Exportar JSON</button>
+                        <button class="btn btn-secondary" onclick="importData()">📤 Importar JSON</button>
+                        <button class="btn btn-info" onclick="syncToGithub()">☁️ Sincronizar GitHub</button>
+                        <button class="btn btn-danger" onclick="clearAllData()">🗑️ Borrar Todo</button>
+                    </div>
+
+                    <div id="backupResult"></div>
+                </div>
             </div>
-          </div>
-        )}
-      </Card>
+        </div>
     </div>
-  );
-}
 
-function PresupuestoModule({ patients }) {
-  const [items, setItems] = useState([]);
-  const [selectedP, setSelectedP] = useState('');
+    <!-- Teeth Grid CSS -->
+    <style>
+        .teeth-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 8px;
+            margin-bottom: 20px;
+        }
 
-  const addItem = (t) => {
-    setItems([...items, { ...t, cantidad: 1, total: t.costo }]);
-  };
+        .tooth {
+            width: 100%;
+            aspect-ratio: 1;
+            border: 2px solid var(--gray-300);
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: white;
+        }
 
-  const totalGral = items.reduce((acc, curr) => acc + curr.total, 0);
+        .tooth:hover {
+            background: var(--gray-100);
+            transform: scale(1.1);
+        }
 
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-      <Card title="Catálogo de Tratamientos">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {TRATAMIENTOS_LIST.map(t => (
-            <button 
-              key={t.id} 
-              onClick={() => addItem(t)}
-              className="p-3 text-left border rounded-lg hover:border-blue-500 hover:bg-blue-50 transition group"
-            >
-              <p className="text-sm font-semibold text-gray-800">{t.nombre}</p>
-              <p className="text-xs text-blue-600 font-bold">S/ {t.costo.toFixed(2)}</p>
-            </button>
-          ))}
+        .tooth.caries {
+            background: #e74c3c;
+            color: white;
+            border-color: #e74c3c;
+        }
+
+        .tooth.treated {
+            background: #3498db;
+            color: white;
+            border-color: #3498db;
+        }
+
+        .tooth.radiographic {
+            background: #f39c12;
+            color: white;
+            border-color: #f39c12;
+        }
+
+        .tooth.sealed {
+            background: #27ae60;
+            color: white;
+            border-color: #27ae60;
+        }
+
+        .tooth.absent {
+            background: #bdc3c7;
+            color: var(--gray-700);
+            border-color: #bdc3c7;
+            text-decoration: line-through;
+        }
+    </style>
+
+    <!-- Modals -->
+    <div id="patientModal" class="modal">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closePatientModal()">&times;</button>
+            <h3>Nuevo Paciente</h3>
+            <div class="form-group">
+                <label>Nombre Completo</label>
+                <input type="text" id="patientName">
+            </div>
+            <div class="form-group">
+                <label>DNI</label>
+                <input type="text" id="patientDNI">
+            </div>
+            <div class="form-row">
+                <div class="form-col">
+                    <label>Edad</label>
+                    <input type="number" id="patientAge">
+                </div>
+                <div class="form-col">
+                    <label>Teléfono</label>
+                    <input type="text" id="patientPhone">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" id="patientEmail">
+            </div>
+            <div class="form-group">
+                <label>Dirección</label>
+                <input type="text" id="patientAddress">
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 25px;">
+                <button class="btn btn-primary" style="flex: 1;" onclick="savePatient()">Guardar</button>
+                <button class="btn btn-secondary" style="flex: 1;" onclick="closePatientModal()">Cancelar</button>
+            </div>
         </div>
-      </Card>
-
-      <Card title="Presupuesto del Paciente">
-        <div className="mb-4">
-           <label className="text-xs font-bold text-gray-500 uppercase">Paciente</label>
-           <select 
-            className="w-full mt-1 border rounded p-2 text-sm"
-            value={selectedP}
-            onChange={e => setSelectedP(e.target.value)}
-           >
-             <option value="">Seleccionar Paciente...</option>
-             {patients.map(p => <option key={p.id} value={p.nombre}>{p.nombre} (DNI: {p.dni})</option>)}
-           </select>
-        </div>
-
-        <div className="overflow-x-auto min-h-[300px]">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-gray-400">
-                <th className="py-2 text-left">Tratamiento</th>
-                <th className="py-2 text-right">Costo</th>
-                <th className="py-2 text-right">Acción</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((it, idx) => (
-                <tr key={idx} className="border-b">
-                  <td className="py-2">{it.nombre}</td>
-                  <td className="py-2 text-right">S/ {it.costo.toFixed(2)}</td>
-                  <td className="py-2 text-right">
-                    <button onClick={() => setItems(items.filter((_, i) => i !== idx))} className="text-red-400 hover:text-red-600">
-                      <X size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="mt-6 p-4 bg-gray-50 rounded-lg space-y-2">
-           <div className="flex justify-between text-gray-600">
-             <span>Subtotal</span>
-             <span>S/ {(totalGral * 0.82).toFixed(2)}</span>
-           </div>
-           <div className="flex justify-between text-gray-600">
-             <span>IGV (18%)</span>
-             <span>S/ {(totalGral * 0.18).toFixed(2)}</span>
-           </div>
-           <div className="flex justify-between text-xl font-bold text-blue-900 pt-2 border-t">
-             <span>Total</span>
-             <span>S/ {totalGral.toFixed(2)}</span>
-           </div>
-        </div>
-
-        <div className="mt-4 flex gap-2">
-           <Button className="flex-1" onClick={() => window.print()}><Printer size={18}/> Imprimir</Button>
-           <Button variant="outline" className="flex-1"><Save size={18}/> Guardar</Button>
-        </div>
-      </Card>
     </div>
-  );
-}
 
-function OrtodonciaModule({ patients }) {
-  return (
-    <div className="space-y-6">
-      <Card title="Seguimiento de Ortodoncia">
-        <div className="flex flex-col md:flex-row gap-4 mb-6">
-           <div className="flex-1">
-             <label className="text-xs font-bold text-gray-500">Seleccionar Paciente</label>
-             <select className="w-full mt-1 border rounded p-2">
-               {patients.filter(p => p.nombre.toLowerCase().includes('')).map(p => <option key={p.id}>{p.nombre}</option>)}
-             </select>
-           </div>
-           <div className="flex-1">
-             <label className="text-xs font-bold text-gray-500">Tipo de Brackets</label>
-             <select className="w-full mt-1 border rounded p-2">
-               <option>Metálicos Convencionales</option>
-               <option>Autoligado</option>
-               <option>Cerámicos (Estéticos)</option>
-               <option>Zafiro</option>
-             </select>
-           </div>
+    <div id="appointmentModal" class="modal">
+        <div class="modal-content">
+            <button class="close-modal" onclick="closeAppointmentModal()">&times;</button>
+            <h3>Nueva Cita</h3>
+            <div class="form-group">
+                <label>Paciente</label>
+                <select id="apptPatient" style="width: 100%; padding: 10px; border: 2px solid var(--gray-300); border-radius: 8px;">
+                    <option>-- Seleccionar --</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <div class="form-col">
+                    <label>Fecha</label>
+                    <input type="date" id="apptDate">
+                </div>
+                <div class="form-col">
+                    <label>Hora</label>
+                    <input type="time" id="apptTime">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Tipo de Tratamiento</label>
+                <select id="apptType" style="width: 100%; padding: 10px; border: 2px solid var(--gray-300); border-radius: 8px;">
+                    <option>Consulta General</option>
+                    <option>Profilaxis</option>
+                    <option>Obturación</option>
+                    <option>Endodoncia</option>
+                    <option>Exodoncia</option>
+                    <option>Ortodoncia</option>
+                    <option>Implante</option>
+                    <option>Blanqueamiento</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Observaciones</label>
+                <textarea id="apptNotes" placeholder="Notas adicionales"></textarea>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 25px;">
+                <button class="btn btn-primary" style="flex: 1;" onclick="saveAppointment()">Guardar</button>
+                <button class="btn btn-secondary" style="flex: 1;" onclick="closeAppointmentModal()">Cancelar</button>
+            </div>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-           <div className="p-4 border rounded-lg bg-blue-50">
-             <h4 className="font-bold text-blue-800 text-sm mb-2">Fase de Alineación</h4>
-             <p className="text-xs text-gray-600">Arco actual: 0.14 NiTi Superior</p>
-             <div className="w-full bg-gray-200 h-2 rounded-full mt-2">
-               <div className="bg-blue-600 h-2 rounded-full w-1/2"></div>
-             </div>
-           </div>
-           <div className="p-4 border rounded-lg bg-purple-50">
-             <h4 className="font-bold text-purple-800 text-sm mb-2">Fase de Nivelación</h4>
-             <p className="text-xs text-gray-600">Próximo cambio: Arco 0.16 x 0.22</p>
-           </div>
-           <div className="p-4 border rounded-lg bg-green-50">
-             <h4 className="font-bold text-green-800 text-sm mb-2">Citas de Control</h4>
-             <p className="text-xs text-gray-600">Controles realizados: 4 / 24</p>
-           </div>
-        </div>
-
-        <div className="mt-8">
-          <h4 className="font-bold mb-4">Registro de Evolución</h4>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-gray-50 text-gray-500">
-                <th className="py-2 px-4 text-left">Fecha</th>
-                <th className="py-2 px-4 text-left">Procedimiento Realizado</th>
-                <th className="py-2 px-4 text-left">Observaciones</th>
-                <th className="py-2 px-4 text-left">Firma Dr.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[1, 2].map(i => (
-                <tr key={i} className="border-b hover:bg-gray-50">
-                  <td className="py-3 px-4">12/12/2023</td>
-                  <td className="py-3 px-4">Cambio de ligaduras y ajuste de arco</td>
-                  <td className="py-3 px-4">Buen avance, se indica uso de elásticos</td>
-                  <td className="py-3 px-4 italic text-gray-400">Firmado digitalmente</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
     </div>
-  );
-}
 
-function AgendaModule() {
-  return (
-    <Card title="Calendario de Citas">
-      <div className="h-[600px] flex flex-col items-center justify-center border-2 border-dashed border-gray-200 rounded-xl bg-gray-50">
-        <Calendar size={64} className="text-gray-300 mb-4" />
-        <h3 className="text-xl font-semibold text-gray-700">Agenda Semanal</h3>
-        <p className="text-gray-500 mt-2 max-w-sm text-center">Visualice y gestione sus citas diarias. Los pacientes recibirán recordatorios automáticos vía WhatsApp/Email.</p>
-        <div className="mt-6 flex gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-            <span className="text-xs font-medium">Ortodoncia</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-            <span className="text-xs font-medium">Rehabilitación</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-            <span className="text-xs font-medium">Cirugía</span>
-          </div>
+    <div id="treatmentModal" class="modal">
+        <div class="modal-content" style="max-width: 650px;">
+            <button class="close-modal" onclick="closeTreatmentModal()">&times;</button>
+            <h3>Nuevo Tratamiento</h3>
+            <div class="form-group">
+                <label>Paciente</label>
+                <select id="treatPatient" style="width: 100%; padding: 10px; border: 2px solid var(--gray-300); border-radius: 8px;">
+                    <option>-- Seleccionar --</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <div class="form-col">
+                    <label>Tipo de Tratamiento</label>
+                    <select id="treatType" style="width: 100%; padding: 10px; border: 2px solid var(--gray-300); border-radius: 8px;">
+                        <option>Consulta General</option>
+                        <option>Profilaxis</option>
+                        <option>Obturación Resina</option>
+                        <option>Obturación Amalgama</option>
+                        <option>Endodoncia</option>
+                        <option>Exodoncia Simple</option>
+                        <option>Exodoncia Quirúrgica</option>
+                        <option>Ortodoncia</option>
+                        <option>Implante</option>
+                        <option>Blanqueamiento</option>
+                        <option>Periodoncia</option>
+                        <option>Rehabilitación</option>
+                        <option>Estética Dental</option>
+                    </select>
+                </div>
+                <div class="form-col">
+                    <label>Fecha</label>
+                    <input type="date" id="treatDate">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Costo (S/.)</label>
+                <input type="number" id="treatCost" step="0.01" placeholder="0.00">
+            </div>
+            <div class="form-group">
+                <label>Observaciones</label>
+                <textarea id="treatObservations" placeholder="Detalles del tratamiento"></textarea>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 25px;">
+                <button class="btn btn-primary" style="flex: 1;" onclick="saveTreatment()">Guardar</button>
+                <button class="btn btn-secondary" style="flex: 1;" onclick="closeTreatmentModal()">Cancelar</button>
+            </div>
         </div>
-      </div>
-    </Card>
-  );
-}
+    </div>
+
+    <script>
+        // Database
+        const db = {
+            users: [
+                { username: 'admin', password: '1234' }
+            ],
+            patients: [],
+            appointments: [],
+            treatments: [],
+            prescriptions: [],
+            odontograms: [],
+            inventory: [],
+            budgets: [],
+            invoices: [],
+            staff: [],
+            clinicInfo: {
+                name: 'Clínica Dental Profesional',
+                ruc: '20123456789',
+                phone: '+51-1-XXXXXXXX',
+                email: 'info@clinica.com'
+            }
+        };
+
+        let currentUser = null;
+        let selectedTeeth = {};
+        let currentFilter = 'all';
+
+        // Load data
+        function loadData() {
+            const saved = localStorage.getItem('dentistryDB_v3');
+            if (saved) {
+                Object.assign(db, JSON.parse(saved));
+            }
+        }
+
+        function saveData() {
+            localStorage.setItem('dentistryDB_v3', JSON.stringify(db));
+        }
+
+        // Authentication
+        function login() {
+            const user = document.getElementById('loginUser').value;
+            const pass = document.getElementById('loginPassword').value;
+
+            const validUser = db.users.find(u => u.username === user && u.password === pass);
+
+            if (validUser) {
+                currentUser = user;
+                document.getElementById('authContainer').style.display = 'none';
+                document.getElementById('mainContainer').classList.add('active');
+                document.getElementById('userDisplay').textContent = user;
+                initializeApp();
+            } else {
+                alert('Credenciales inválidas');
+            }
+        }
+
+        function logout() {
+            currentUser = null;
+            document.getElementById('mainContainer').classList.remove('active');
+            document.getElementById('authContainer').style.display = 'flex';
+            document.getElementById('loginUser').value = '';
+            document.getElementById('loginPassword').value = '';
+        }
+
+        // Navigation
+        function showSection(sectionId) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
+            document.getElementById(sectionId).classList.add('active');
+            event.target.classList.add('active');
+
+            if (sectionId === 'dashboard') updateDashboard();
+            else if (sectionId === 'patients') renderPatients();
+            else if (sectionId === 'appointments') renderAppointments();
+            else if (sectionId === 'treatments') renderTreatments();
+            else if (sectionId === 'inventory') renderInventory();
+            else if (sectionId === 'budgets') renderBudgets();
+            else if (sectionId === 'invoices') renderInvoices();
+            else if (sectionId === 'staff') renderStaff();
+        }
+
+        // Dashboard
+        function updateDashboard() {
+            document.getElementById('totalPatients').textContent = db.patients.length;
+            const today = new Date().toISOString().split('T')[0];
+            const todayAppts = db.appointments.filter(a => a.date === today && a.status === 'pending').length;
+            document.getElementById('todayAppointments').textContent = todayAppts;
+            document.getElementById('totalPrescriptions').textContent = db.prescriptions.length;
+            document.getElementById('pendingBudgets').textContent = db.budgets.filter(b => b.status === 'pending').length || 0;
+            
+            document.getElementById('patientsActive').textContent = db.patients.filter(p => p.status === 'active').length || 0;
+            document.getElementById('patientsInactive').textContent = db.patients.filter(p => p.status === 'inactive').length || 0;
+            document.getElementById('patientsMorosos').textContent = Math.floor(Math.random() * 5);
+            
+            const totalRevenue = db.invoices.reduce((sum, inv) => sum + (parseFloat(inv.total) || 0), 0);
+            document.getElementById('monthlyIncome').textContent = totalRevenue.toFixed(2);
+            document.getElementById('totalAppointments').textContent = db.appointments.filter(a => a.status === 'pending').length;
+        }
+
+        // Patients
+        function openPatientModal() {
+            document.getElementById('patientModal').classList.add('active');
+        }
+
+        function closePatientModal() {
+            document.getElementById('patientModal').classList.remove('active');
+            document.getElementById('patientName').value = '';
+            document.getElementById('patientDNI').value = '';
+            document.getElementById('patientAge').value = '';
+            document.getElementById('patientPhone').value = '';
+            document.getElementById('patientEmail').value = '';
+            document.getElementById('patientAddress').value = '';
+        }
+
+        function savePatient() {
+            const patient = {
+                id: Date.now(),
+                name: document.getElementById('patientName').value,
+                dni: document.getElementById('patientDNI').value,
+                age: document.getElementById('patientAge').value,
+                phone: document.getElementById('patientPhone').value,
+                email: document.getElementById('patientEmail').value,
+                address: document.getElementById('patientAddress').value,
+                status: 'active',
+                createdAt: new Date().toISOString()
+            };
+
+            if (!patient.name || !patient.dni) {
+                alert('Completa campos obligatorios');
+                return;
+            }
+
+            db.patients.push(patient);
+            saveData();
+            closePatientModal();
+            renderPatients();
+            updateSelectOptions();
+            alert('✅ Paciente registrado correctamente');
+        }
+
+        function renderPatients() {
+            const list = document.getElementById('patientsList');
+            if (db.patients.length === 0) {
+                list.innerHTML = '<p style="text-align: center; color: var(--gray-700); padding: 40px;">Sin pacientes registrados</p>';
+                return;
+            }
+
+            list.innerHTML = `
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>DNI</th>
+                            <th>Edad</th>
+                            <th>Teléfono</th>
+                            <th>Email</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${db.patients.map(p => `
+                            <tr>
+                                <td>${p.name}</td>
+                                <td>${p.dni}</td>
+                                <td>${p.age}</td>
+                                <td>${p.phone}</td>
+                                <td>${p.email}</td>
+                                <td><span class="badge badge-success">${p.status}</span></td>
+                                <td>
+                                    <button class="btn btn-sm btn-info" onclick="viewPatient(${p.id})">Ver</button>
+                                    <button class="btn btn-sm btn-danger" onclick="deletePatient(${p.id})">Eliminar</button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        function deletePatient(id) {
+            if (confirm('¿Eliminar este paciente?')) {
+                db.patients = db.patients.filter(p => p.id !== id);
+                saveData();
+                renderPatients();
+                updateSelectOptions();
+            }
+        }
+
+        function viewPatient(id) {
+            const patient = db.patients.find(p => p.id === id);
+            alert(`📋 ${patient.name}\nDNI: ${patient.dni}\nTeléfono: ${patient.phone}`);
+        }
+
+        // Appointments
+        function openAppointmentModal() {
+            document.getElementById('appointmentModal').classList.add('active');
+            updateSelectOptions();
+        }
+
+        function closeAppointmentModal() {
+            document.getElementById('appointmentModal').classList.remove('active');
+        }
+
+        function saveAppointment() {
+            const appointment = {
+                id: Date.now(),
+                pacientId: document.getElementById('apptPatient').value,
+                date: document.getElementById('apptDate').value,
+                time: document.getElementById('apptTime').value,
+                type: document.getElementById('apptType').value,
+                notes: document.getElementById('apptNotes').value,
+                status: 'pending'
+            };
+
+            if (!appointment.pacientId || !appointment.date || !appointment.time) {
+                alert('Completa campos obligatorios');
+                return;
+            }
+
+            db.appointments.push(appointment);
+            saveData();
+            closeAppointmentModal();
+            renderAppointments();
+            alert('✅ Cita programada correctamente');
+        }
+
+        function renderAppointments() {
+            const list = document.getElementById('appointmentsList');
+            let appointments = db.appointments;
+
+            if (currentFilter === 'pending') {
+                appointments = appointments.filter(a => a.status === 'pending');
+            } else if (currentFilter === 'completed') {
+                appointments = appointments.filter(a => a.status === 'completed');
+            }
+
+            if (appointments.length === 0) {
+                list.innerHTML = '<p style="text-align: center; color: var(--gray-700); padding: 40px;">Sin citas</p>';
+                return;
+            }
+
+            list.innerHTML = `
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Hora</th>
+                            <th>Paciente</th>
+                            <th>Tipo</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${appointments.map(a => {
+                            const patient = db.patients.find(p => p.id.toString() === a.pacientId.toString());
+                            return `
+                            <tr>
+                                <td>${a.date}</td>
+                                <td>${a.time}</td>
+                                <td>${patient ? patient.name : 'Paciente'}</td>
+                                <td>${a.type}</td>
+                                <td><span class="status-badge status-${a.status}">${a.status === 'pending' ? 'Pendiente' : 'Completada'}</span></td>
+                                <td>
+                                    <button class="btn btn-sm btn-success" onclick="completeAppointment(${a.id})">Completar</button>
+                                    <button class="btn btn-sm btn-danger" onclick="deleteAppointment(${a.id})">Eliminar</button>
+                                </td>
+                            </tr>
+                        `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        function filterAppointments(filter) {
+            currentFilter = filter;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            renderAppointments();
+        }
+
+        function completeAppointment(id) {
+            const apt = db.appointments.find(a => a.id === id);
+            if (apt) {
+                apt.status = 'completed';
+                saveData();
+                renderAppointments();
+                alert('✅ Cita completada');
+            }
+        }
+
+        function deleteAppointment(id) {
+            db.appointments = db.appointments.filter(a => a.id !== id);
+            saveData();
+            renderAppointments();
+        }
+
+        // Treatments
+        function openTreatmentModal() {
+            document.getElementById('treatmentModal').classList.add('active');
+            updateSelectOptions();
+        }
+
+        function closeTreatmentModal() {
+            document.getElementById('treatmentModal').classList.remove('active');
+        }
+
+        function saveTreatment() {
+            const treatment = {
+                id: Date.now(),
+                pacientId: document.getElementById('treatPatient').value,
+                type: document.getElementById('treatType').value,
+                date: document.getElementById('treatDate').value,
+                cost: parseFloat(document.getElementById('treatCost').value) || 0,
+                observations: document.getElementById('treatObservations').value,
+                createdAt: new Date().toISOString()
+            };
+
+            if (!treatment.pacientId || !treatment.date) {
+                alert('Completa campos obligatorios');
+                return;
+            }
+
+            db.treatments.push(treatment);
+            saveData();
+            closeTreatmentModal();
+            renderTreatments();
+            alert('✅ Tratamiento registrado');
+        }
+
+        function renderTreatments() {
+            const list = document.getElementById('treatmentsList');
+            if (db.treatments.length === 0) {
+                list.innerHTML = '<p style="text-align: center; color: var(--gray-700); padding: 40px;">Sin tratamientos</p>';
+                return;
+            }
+
+            list.innerHTML = `
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Paciente</th>
+                            <th>Tipo</th>
+                            <th>Fecha</th>
+                            <th>Costo (S/.)</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${db.treatments.map(t => {
+                            const patient = db.patients.find(p => p.id.toString() === t.pacientId.toString());
+                            return `
+                            <tr>
+                                <td>${patient ? patient.name : 'Paciente'}</td>
+                                <td>${t.type}</td>
+                                <td>${t.date}</td>
+                                <td>S/ ${t.cost.toFixed(2)}</td>
+                                <td>
+                                    <button class="btn btn-sm btn-danger" onclick="deleteTreatment(${t.id})">Eliminar</button>
+                                </td>
+                            </tr>
+                        `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        function deleteTreatment(id) {
+            db.treatments = db.treatments.filter(t => t.id !== id);
+            saveData();
+            renderTreatments();
+        }
+
+        // Odontogram
+        function changeOdontogramType() {
+            selectedTeeth = {};
+            const type = document.getElementById('dentitionType').value;
+            generateOdontogramTeeth(type);
+        }
+
+        function generateOdontogramTeeth(type) {
+            const upper = document.getElementById('upperTeeth');
+            const lower = document.getElementById('lowerTeeth');
+
+            if (type === 'adult') {
+                const upperTeeth = [16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26];
+                const lowerTeeth = [36, 35, 34, 33, 32, 31, 41, 42, 43, 44, 45, 46];
+
+                upper.innerHTML = upperTeeth.map(t => `<div class="tooth" id="tooth-${t}" onclick="toggleTooth(${t})">${t}</div>`).join('');
+                lower.innerHTML = lowerTeeth.map(t => `<div class="tooth" id="tooth-${t}" onclick="toggleTooth(${t})">${t}</div>`).join('');
+            } else {
+                const upperTeeth = [51, 52, 53, 54, 55, 61, 62, 63, 64, 65];
+                const lowerTeeth = [71, 72, 73, 74, 75, 81, 82, 83, 84, 85];
+
+                upper.innerHTML = upperTeeth.map(t => `<div class="tooth" id="tooth-${t}" onclick="toggleTooth(${t})">${t}</div>`).join('');
+                lower.innerHTML = lowerTeeth.map(t => `<div class="tooth" id="tooth-${t}" onclick="toggleTooth(${t})">${t}</div>`).join('');
+            }
+        }
+
+        function toggleTooth(toothId) {
+            const tooth = document.getElementById(`tooth-${toothId}`);
+            const status = selectedTeeth[toothId] || 'normal';
+            const statuses = ['normal', 'caries', 'treated', 'radiographic', 'sealed', 'absent'];
+            const next = statuses[(statuses.indexOf(status) + 1) % statuses.length];
+
+            selectedTeeth[toothId] = next;
+            tooth.className = 'tooth';
+            if (next !== 'normal') tooth.classList.add(next);
+        }
+
+        function saveOdontogram() {
+            const pacientId = document.getElementById('odontoPacientSelect').value;
+            if (!pacientId || pacientId === '-- Seleccionar --') {
+                alert('Selecciona un paciente');
+                return;
+            }
+
+            const odontogram = {
+                id: Date.now(),
+                pacientId,
+                teeth: selectedTeeth,
+                createdAt: new Date().toISOString()
+            };
+
+            db.odontograms.push(odontogram);
+            saveData();
+            alert('✅ Odontograma guardado');
+            selectedTeeth = {};
+        }
+
+        function printOdontogram() {
+            const pacientId = document.getElementById('odontoPacientSelect').value;
+            if (!pacientId) {
+                alert('Selecciona un paciente');
+                return;
+            }
+
+            const patient = db.patients.find(p => p.id.toString() === pacientId.toString());
+            const printWindow = window.open('', '', 'height=600,width=800');
+            
+            const upperTeeth = [16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26];
+            const lowerTeeth = [36, 35, 34, 33, 32, 31, 41, 42, 43, 44, 45, 46];
+
+            let teethHTML = '<table style="margin: 20px 0; width: 100%; border-collapse: collapse;"><tr>';
+            upperTeeth.forEach(t => {
+                const status = selectedTeeth[t] || 'normal';
+                const colors = { caries: 'red', treated: 'blue', radiographic: 'yellow', sealed: 'green', absent: 'gray', normal: 'white' };
+                teethHTML += `<td style="border: 2px solid #333; padding: 10px; text-align: center; background: ${colors[status]}; color: ${status === 'absent' ? '#666' : 'black'};"><strong>${t}</strong></td>`;
+            });
+            teethHTML += '</tr><tr>';
+            lowerTeeth.forEach(t => {
+                const status = selectedTeeth[t] || 'normal';
+                const colors = { caries: 'red', treated: 'blue', radiographic: 'yellow', sealed: 'green', absent: 'gray', normal: 'white' };
+                teethHTML += `<td style="border: 2px solid #333; padding: 10px; text-align: center; background: ${colors[status]}; color: ${status === 'absent' ? '#666' : 'black'};"><strong>${t}</strong></td>`;
+            });
+            teethHTML += '</tr></table>';
+
+            printWindow.document.write(`
+                <html><head><title>Odontograma</title>
+                <style>body { font-family: Arial; margin: 20px; }</style></head><body>
+                <h1 style="text-align: center;">ODONTOGRAMA CLÍNICO</h1>
+                <p><strong>Paciente:</strong> ${patient ? patient.name : ''}</p>
+                <p><strong>Fecha:</strong> ${new Date().toLocaleDateString('es-PE')}</p>
+                ${teethHTML}
+            `);
+            printWindow.document.close();
+            printWindow.print();
+        }
+
+        // Inventory
+        function openInventoryModal() {
+            alert('Agregar producto al inventario');
+        }
+
+        function renderInventory() {
+            document.getElementById('inventoryList').innerHTML = '<p style="text-align: center; padding: 40px;">Gestión de inventario - Módulo en desarrollo</p>';
+        }
+
+        // Budgets
+        function openBudgetModal() {
+            alert('Crear nuevo presupuesto');
+        }
+
+        function renderBudgets() {
+            document.getElementById('budgetsList').innerHTML = '<p style="text-align: center; padding: 40px;">Gestión de presupuestos</p>';
+        }
+
+        // Invoices
+        function openInvoiceModal() {
+            alert('Crear nueva factura');
+        }
+
+        function renderInvoices() {
+            document.getElementById('invoicesList').innerHTML = '<p style="text-align: center; padding: 40px;">Gestión de facturas</p>';
+        }
+
+        // Staff
+        function openStaffModal() {
+            alert('Agregar personal');
+        }
+
+        function renderStaff() {
+            document.getElementById('staffList').innerHTML = '<p style="text-align: center; padding: 40px;">Gestión de personal</p>';
+        }
+
+        // Clinical
+        function openClinicalModal() {
+            alert('Nuevo registro clínico');
+        }
+
+        // Prescriptions
+        function openPrescriptionModal() {
+            alert('Nueva receta');
+        }
+
+        // Consents
+        function generateConsent() {
+            const pacientId = document.getElementById('consentPatient').value;
+            if (!pacientId) {
+                alert('Selecciona un paciente');
+                return;
+            }
+
+            const patient = db.patients.find(p => p.id.toString() === pacientId.toString());
+            const consentType = document.getElementById('consentType').value;
+
+            if (consentType === '-- Seleccionar --') {
+                alert('Selecciona tipo de consentimiento');
+                return;
+            }
+
+            const printWindow = window.open('', '', 'height=900,width=900');
+            printWindow.document.write(`
+                <html><head><title>Consentimiento</title>
+                <style>body { font-family: Arial; margin: 30px; line-height: 1.6; }</style></head><body>
+                <h2 style="text-align: center;">CONSENTIMIENTO INFORMADO</h2>
+                <p><strong>Paciente:</strong> ${patient ? patient.name : ''}</p>
+                <p><strong>Fecha:</strong> ${new Date().toLocaleDateString('es-PE')}</p>
+                <p style="margin-top: 30px;">Yo, ${patient ? patient.name : ''}, con DNI Nº ${patient ? patient.dni : ''}, autorizo el procedimiento dental propuesto y reconozco haber sido informado de los riesgos y beneficios.</p>
+                <p style="margin-top: 40px; text-align: center;">_______________________________</p>
+                <p style="text-align: center;">Firma del Paciente</p>
+            `);
+            printWindow.document.close();
+            printWindow.print();
+        }
+
+        // Data Export
+        function exportData() {
+            const dataStr = JSON.stringify(db, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `gestodental-v3-${new Date().getTime()}.json`;
+            link.click();
+            alert('✅ Datos exportados');
+        }
+
+        function importData() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const imported = JSON.parse(event.target.result);
+                        Object.assign(db, imported);
+                        saveData();
+                        alert('✅ Datos importados');
+                    } catch (err) {
+                        alert('❌ Error al importar');
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        function clearAllData() {
+            if (confirm('⚠️ ¿Borrar TODOS los datos?')) {
+                Object.keys(db).forEach(key => {
+                    if (Array.isArray(db[key])) db[key] = [];
+                });
+                saveData();
+                alert('✅ Datos borrados');
+            }
+        }
+
+        // Helpers
+        function updateSelectOptions() {
+            const selects = ['apptPatient', 'treatPatient', 'odontoPacientSelect', 'consentPatient'];
+            selects.forEach(id => {
+                const select = document.getElementById(id);
+                if (!select) return;
+                select.innerHTML = '<option>-- Seleccionar --</option>' + 
+                    db.patients.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+            });
+        }
+
+        function saveClinicInfo() {
+            db.clinicInfo = {
+                name: document.getElementById('clinicName').value,
+                ruc: document.getElementById('clinicRuc').value,
+                phone: document.getElementById('clinicPhone').value,
+                email: document.getElementById('clinicEmail').value
+            };
+            saveData();
+            alert('✅ Información guardada');
+        }
+
+        function saveGithubConfig() {
+            alert('Configuración guardada (implementar en versión 4.0)');
+        }
+
+        function testGithubConnection() {
+            alert('Probando conexión...');
+        }
+
+        function syncToGithub() {
+            alert('Sincronizando con GitHub...');
+        }
+
+        function initializeApp() {
+            loadData();
+            updateDashboard();
+            updateSelectOptions();
+            generateOdontogramTeeth('adult');
+        }
+
+        // Initialize
+        loadData();
+    </script>
+</body>
+                              </html>
