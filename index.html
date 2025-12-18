@@ -574,7 +574,14 @@
             document.querySelectorAll('.menu-item').forEach(item => {
                 item.classList.remove('active');
             });
-            event.target.closest('.menu-item').classList.add('active');
+            // Buscar y activar el menú correspondiente
+            const menuItems = document.querySelectorAll('.menu-item');
+            menuItems.forEach(item => {
+                const onclick = item.getAttribute('onclick');
+                if (onclick && onclick.includes("'" + section + "'")) {
+                    item.classList.add('active');
+                }
+            });
 
             // Cargar datos de la sección
             if (section === 'pacientes') renderPacientesTable();
