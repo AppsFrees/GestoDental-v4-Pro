@@ -754,33 +754,209 @@
             guardarDatos();
         }
 
-        // Stub Functions for Forms
+    // Funciones de Formularios - Implementación Funcional
         function showAddPacienteForm() {
-            alert('Función de agregar paciente - Próximamente');
+            const nombre = prompt('Nombre completo del paciente:');
+            if (!nombre) return;
+            
+            const telefono = prompt('Teléfono:');
+            const email = prompt('Email:');
+            const fechaNacimiento = prompt('Fecha de nacimiento (YYYY-MM-DD):');
+            
+            const nuevoPaciente = {
+                id: Date.now(),
+                nombre: nombre,
+                telefono: telefono || '',
+                email: email || '',
+                fechaNacimiento: fechaNacimiento || '',
+                fechaRegistro: new Date().toISOString().split('T')[0]
+            };
+            
+            pacientes.push(nuevoPaciente);
+            guardarDatos();
+            renderPacientesTable();
+            updateDashboard();
+            alert('¡Paciente agregado exitosamente!');
         }
 
         function showAddCitaForm() {
-            alert('Función de agregar cita - Próximamente');
+            if (pacientes.length === 0) {
+                alert('Primero debe agregar pacientes');
+                return;
+            }
+            
+            let listaPacientes = 'Seleccione un paciente por ID:\n\n';
+            pacientes.forEach(p => {
+                listaPacientes += `ID: ${p.id} - ${p.nombre}\n`;
+            });
+            
+            const pacienteId = parseInt(prompt(listaPacientes + '\nIngrese el ID del paciente:'));
+            if (!pacienteId) return;
+            
+            const paciente = pacientes.find(p => p.id === pacienteId);
+            if (!paciente) {
+                alert('Paciente no encontrado');
+                return;
+            }
+            
+            const fecha = prompt('Fecha de la cita (YYYY-MM-DD):');
+            if (!fecha) return;
+            
+            const hora = prompt('Hora de la cita (HH:MM):');
+            if (!hora) return;
+            
+            const tratamiento = prompt('Tratamiento a realizar:');
+            
+            const nuevaCita = {
+                id: Date.now(),
+                pacienteId: pacienteId,
+                fecha: fecha,
+                hora: hora,
+                tratamiento: tratamiento || 'Consulta general',
+                estado: 'pendiente'
+            };
+            
+            citas.push(nuevaCita);
+            guardarDatos();
+            renderCitasTable();
+            updateDashboard();
+            alert('¡Cita agendada exitosamente!');
         }
 
         function showAddPresupuestoForm() {
-            alert('Función de agregar presupuesto - Próximamente');
+            if (pacientes.length === 0) {
+                alert('Primero debe agregar pacientes');
+                return;
+            }
+            
+            let listaPacientes = 'Seleccione un paciente por ID:\n\n';
+            pacientes.forEach(p => {
+                listaPacientes += `ID: ${p.id} - ${p.nombre}\n`;
+            });
+            
+            const pacienteId = parseInt(prompt(listaPacientes + '\nIngrese el ID del paciente:'));
+            if (!pacienteId) return;
+            
+            const tratamiento = prompt('Tratamiento:');
+            if (!tratamiento) return;
+            
+            const monto = parseFloat(prompt('Monto del presupuesto:'));
+            if (!monto || isNaN(monto)) return;
+            
+            const nuevoPresupuesto = {
+                id: Date.now(),
+                pacienteId: pacienteId,
+                tratamiento: tratamiento,
+                monto: monto,
+                fecha: new Date().toISOString().split('T')[0],
+                estado: 'pendiente'
+            };
+            
+            presupuestos.push(nuevoPresupuesto);
+            guardarDatos();
+            renderPresupuestosTable();
+            alert('¡Presupuesto creado exitosamente!');
         }
 
         function showAddFacturaForm() {
-            alert('Función de agregar factura - Próximamente');
+            if (pacientes.length === 0) {
+                alert('Primero debe agregar pacientes');
+                return;
+            }
+            
+            let listaPacientes = 'Seleccione un paciente por ID:\n\n';
+            pacientes.forEach(p => {
+                listaPacientes += `ID: ${p.id} - ${p.nombre}\n`;
+            });
+            
+            const pacienteId = parseInt(prompt(listaPacientes + '\nIngrese el ID del paciente:'));
+            if (!pacienteId) return;
+            
+            const concepto = prompt('Concepto de la factura:');
+            if (!concepto) return;
+            
+            const monto = parseFloat(prompt('Monto:'));
+            if (!monto || isNaN(monto)) return;
+            
+            const nuevaFactura = {
+                id: Date.now(),
+                pacienteId: pacienteId,
+                concepto: concepto,
+                monto: monto,
+                fecha: new Date().toISOString().split('T')[0],
+                pagado: false
+            };
+            
+            facturas.push(nuevaFactura);
+            guardarDatos();
+            renderFacturasTable();
+            updateDashboard();
+            alert('¡Factura generada exitosamente!');
         }
 
         function showAddInventarioForm() {
-            alert('Función de agregar inventario - Próximamente');
+            const nombre = prompt('Nombre del producto:');
+            if (!nombre) return;
+            
+            const cantidad = parseInt(prompt('Cantidad:'));
+            if (!cantidad || isNaN(cantidad)) return;
+            
+            const precio = parseFloat(prompt('Precio unitario:'));
+            if (!precio || isNaN(precio)) return;
+            
+            const nuevoItem = {
+                id: Date.now(),
+                nombre: nombre,
+                cantidad: cantidad,
+                precio: precio,
+                fechaIngreso: new Date().toISOString().split('T')[0]
+            };
+            
+            inventario.push(nuevoItem);
+            guardarDatos();
+            renderInventarioTable();
+            alert('¡Producto agregado al inventario!');
         }
 
         function showAddPersonalForm() {
-            alert('Función de agregar personal - Próximamente');
+            const nombre = prompt('Nombre del empleado:');
+            if (!nombre) return;
+            
+            const cargo = prompt('Cargo:');
+            const telefono = prompt('Teléfono:');
+            const email = prompt('Email:');
+            
+            const nuevoEmpleado = {
+                id: Date.now(),
+                nombre: nombre,
+                cargo: cargo || 'No especificado',
+                telefono: telefono || '',
+                email: email || '',
+                fechaContratacion: new Date().toISOString().split('T')[0]
+            };
+            
+            personal.push(nuevoEmpleado);
+            guardarDatos();
+            renderPersonalTable();
+            alert('¡Empleado agregado exitosamente!');
         }
 
         function editPaciente(id) {
-            alert('Editar paciente ' + id + ' - Próximamente');
+            const paciente = pacientes.find(p => p.id === id);
+            if (!paciente) return;
+            
+            const nombre = prompt('Nombre:', paciente.nombre);
+            if (nombre) paciente.nombre = nombre;
+            
+            const telefono = prompt('Teléfono:', paciente.telefono);
+            if (telefono !== null) paciente.telefono = telefono;
+            
+            const email = prompt('Email:', paciente.email);
+            if (email !== null) paciente.email = email;
+            
+            guardarDatos();
+            renderPacientesTable();
+            alert('¡Paciente actualizado!');
         }
 
         function deleteCita(id) {
@@ -788,8 +964,9 @@
                 citas = citas.filter(c => c.id !== id);
                 guardarDatos();
                 renderCitasTable();
+                updateDashboard();
             }
-        }
+        }    }
     </script>
 </body>
 </html>
